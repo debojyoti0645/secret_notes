@@ -46,6 +46,8 @@ class _RegisterPageState extends State<RegisterPage>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
+        height: MediaQuery.of(context).size.height,
+        width: MediaQuery.of(context).size.width,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topRight,
@@ -59,142 +61,150 @@ class _RegisterPageState extends State<RegisterPage>
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 40),
-                      Hero(
-                        tag: 'logo',
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Theme.of(context)
-                                    .primaryColor
-                                    .withOpacity(0.3),
-                                blurRadius: 20,
-                                spreadRadius: 2,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.person_add_outlined,
-                            size: 80,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      Text(
-                        'Create Account',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
+            child: Container(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    MediaQuery.of(context).padding.bottom,
+              ),
+              padding: const EdgeInsets.all(24.0),
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Hero(
+                          tag: 'logo',
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Theme.of(context)
+                                      .primaryColor
+                                      .withOpacity(0.3),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              Icons.person_add_outlined,
+                              size: 80,
                               color: Theme.of(context).primaryColor,
                             ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
-                      Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            children: [
-                              _buildTextField(
-                                controller: _nameController,
-                                label: 'Enter a nickname',
-                                icon: Icons.person_outline,
-                                validator: (value) => value?.isEmpty ?? true
-                                    ? 'This name will be used to identify you'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildTextField(
-                                controller: _emailController,
-                                label: 'Email',
-                                icon: Icons.email_outlined,
-                                keyboardType: TextInputType.emailAddress,
-                                validator: (value) => value?.isEmpty ?? true
-                                    ? 'Please enter your email'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildTextField(
-                                controller: _passwordController,
-                                label: 'Password',
-                                icon: Icons.lock_outline,
-                                isPassword: true,
-                                validator: (value) => value?.isEmpty ?? true
-                                    ? 'Please enter a password'
-                                    : null,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildTextField(
-                                controller: _confirmPasswordController,
-                                label: 'Confirm Password',
-                                icon: Icons.lock_outline,
-                                isPassword: true,
-                                validator: (value) {
-                                  if (value?.isEmpty ?? true) {
-                                    return 'Please confirm your password';
-                                  }
-                                  if (value != _passwordController.text) {
-                                    return 'Passwords do not match';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ],
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _registerUser,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        const SizedBox(height: 32),
+                        Text(
+                          'Create Account',
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 32),
+                        Card(
+                          elevation: 4,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(15),
                           ),
-                          elevation: 3,
-                        ),
-                        child: const Text(
-                          'Register',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () => Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const LoginPage(),
-                              ),
-                              (route) => false,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              children: [
+                                _buildTextField(
+                                  controller: _nameController,
+                                  label: 'Enter a nickname',
+                                  icon: Icons.person_outline,
+                                  validator: (value) => value?.isEmpty ?? true
+                                      ? 'This name will be used to identify you'
+                                      : null,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _emailController,
+                                  label: 'Email',
+                                  icon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
+                                  validator: (value) => value?.isEmpty ?? true
+                                      ? 'Please enter your email'
+                                      : null,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _passwordController,
+                                  label: 'Password',
+                                  icon: Icons.lock_outline,
+                                  isPassword: true,
+                                  validator: (value) => value?.isEmpty ?? true
+                                      ? 'Please enter a password'
+                                      : null,
+                                ),
+                                const SizedBox(height: 16),
+                                _buildTextField(
+                                  controller: _confirmPasswordController,
+                                  label: 'Confirm Password',
+                                  icon: Icons.lock_outline,
+                                  isPassword: true,
+                                  validator: (value) {
+                                    if (value?.isEmpty ?? true) {
+                                      return 'Please confirm your password';
+                                    }
+                                    if (value != _passwordController.text) {
+                                      return 'Passwords do not match';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ],
                             ),
-                        child: Text(
-                          'Already have an account? Login',
-                          style: TextStyle(
-                            color: Theme.of(context).primaryColor,
-                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: _registerUser,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            elevation: 3,
+                          ),
+                          child: const Text(
+                            'Register',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: () => Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const LoginPage(),
+                                ),
+                                (route) => false,
+                              ),
+                          child: Text(
+                            'Already have an account? Login',
+                            style: TextStyle(
+                              color: Theme.of(context).primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -7,7 +7,9 @@ class Message {
   final String message;
   final DateTime timestamp;
   final bool isDisappearing;
-  final int? disappearAfter; // in seconds
+  final int? disappearAfter;
+  final bool isSeen;  // Add this field
+  final DateTime? seenAt;  // Add this field
 
   Message({
     required this.id,
@@ -17,6 +19,8 @@ class Message {
     required this.timestamp,
     this.isDisappearing = false,
     this.disappearAfter,
+    this.isSeen = false,  // Initialize as false
+    this.seenAt,
   });
 
   factory Message.fromMap(Map<String, dynamic> map, String id) {
@@ -28,6 +32,8 @@ class Message {
       timestamp: (map['timestamp'] as Timestamp).toDate(),
       isDisappearing: map['isDisappearing'] ?? false,
       disappearAfter: map['disappearAfter'],
+      isSeen: map['isSeen'] ?? false,
+      seenAt: map['seenAt'] != null ? (map['seenAt'] as Timestamp).toDate() : null,
     );
   }
 
@@ -39,14 +45,16 @@ class Message {
       'timestamp': timestamp,
       'isDisappearing': isDisappearing,
       'disappearAfter': disappearAfter,
+      'isSeen': isSeen,
+      'seenAt': seenAt,
     };
   }
 
   bool shouldBeDeleted() {
-    if (!isDisappearing || disappearAfter == null) return false;
-
-    final timestamp = this.timestamp;
-    final expiryTime = timestamp.add(Duration(seconds: disappearAfter!));
+    if (!isDisappearing || disappearAfter == null || !isSeen) return false;
+    
+    final startTime = seenAt ?? timestamp;
+    final expiryTime = startTime.add(Duration(seconds: disappearAfter!));
     return DateTime.now().isAfter(expiryTime);
   }
 }

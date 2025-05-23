@@ -77,28 +77,54 @@ class _ChatPageState extends State<ChatPage> {
         .delete();
   }
 
-  // Modify how we handle disappearing messages
+  // Add this method to _ChatPageState class
+  void _markMessageAsSeen(DocumentSnapshot message) {
+    final data = message.data() as Map<String, dynamic>;
+    
+    if (message['receiver'] == widget.currentUser && 
+        !(data['isSeen'] ?? false)) {  // Only mark if not already seen
+      FirebaseFirestore.instance
+          .collection('chats')
+          .doc(message.id)
+          .update({
+            'isSeen': true,
+            'seenAt': FieldValue.serverTimestamp(),
+          });
+    }
+  }
+
+  // Modify _startMessageTimer method
   void _startMessageTimer(DocumentSnapshot message) {
     if (!mounted) return;
     
+    final data = message.data() as Map<String, dynamic>;
     final String messageId = message.id;
-    final timestamp = (message['timestamp'] as Timestamp?)?.toDate();
-    final disappearAfter = message['disappearAfter'] as int?;
+    final bool isSeen = data['isSeen'] ?? false;
+    final bool isDisappearing = data['isDisappearing'] ?? false;
+    final seenAt = data['seenAt'] as Timestamp?;
+    final disappearAfter = data['disappearAfter'] as int?;
     
-    if (timestamp != null && disappearAfter != null) {
-      final expiryTime = timestamp.add(Duration(seconds: disappearAfter));
-      final remaining = expiryTime.difference(DateTime.now());
-      
-      if (remaining.isNegative) {
-        _deleteMessage(messageId);
-      } else {
-        _disappearingTimers[messageId]?.cancel(); // Cancel existing timer if any
-        _disappearingTimers[messageId] = Timer(remaining, () {
-          if (mounted) { // Check if widget is still mounted
-            _deleteMessage(messageId);
-          }
-        });
-      }
+    // Only proceed if this is a disappearing message
+    if (!isDisappearing) return;
+    
+    // Cancel any existing timer for this message
+    _disappearingTimers[messageId]?.cancel();
+    
+    // If message isn't seen yet, don't start the timer
+    if (!isSeen || seenAt == null || disappearAfter == null) return;
+    
+    // Calculate remaining time from when the message was first seen
+    final expiryTime = seenAt.toDate().add(Duration(seconds: disappearAfter));
+    final remaining = expiryTime.difference(DateTime.now());
+    
+    if (remaining.isNegative) {
+      _deleteMessage(messageId);
+    } else {
+      _disappearingTimers[messageId] = Timer(remaining, () {
+        if (mounted) {
+          _deleteMessage(messageId);
+        }
+      });
     }
   }
 
@@ -107,23 +133,24 @@ class _ChatPageState extends State<ChatPage> {
     if (text.isEmpty) return;
 
     try {
-      // Encrypt the message
       final encryptedMessage = EncryptionService.encryptMessage(text, _encryptionKey);
 
       // Add encrypted message to chats collection
-      final messageRef = await FirebaseFirestore.instance.collection('chats').add({
+      await FirebaseFirestore.instance.collection('chats').add({
         'sender': widget.currentUser,
         'receiver': widget.otherUser,
-        'message': encryptedMessage, // Store encrypted message
+        'message': encryptedMessage,
         'timestamp': FieldValue.serverTimestamp(),
         'isDisappearing': _isDisappearingNote,
         'disappearAfter': _isDisappearingNote ? _disappearAfter : null,
+        'isSeen': false,
+        'seenAt': null,
       });
 
-      // If it's a disappearing note, start the timer
-      if (_isDisappearingNote) {
-        _startDisappearingTimer(messageRef.id, _disappearAfter);
-      }
+      // Remove this line as we don't want to start the timer immediately
+      // if (_isDisappearingNote) {
+      //   _startDisappearingTimer(messageRef.id, _disappearAfter);
+      // }
 
       // Update contact records for both users
       final senderData = await FirebaseFirestore.instance
@@ -325,30 +352,16 @@ class _ChatPageState extends State<ChatPage> {
                     final sender = doc['sender'];
                     final receiver = doc['receiver'];
                     
-                    // Check if message should be visible
+                    // Mark message as seen if current user is the receiver
+                    if (receiver == widget.currentUser) {
+                      _markMessageAsSeen(doc);
+                    }
+                    
+                    // Start timer only for disappearing messages that have been seen
                     final isDisappearing = doc['isDisappearing'] ?? false;
-                    if (isDisappearing) {
-                      final timestamp = doc['timestamp'];
-                      final disappearAfter = doc['disappearAfter'] as int?;
-                      
-                      // Add null check for timestamp
-                      if (timestamp != null && disappearAfter != null) {
-                        try {
-                          final messageTime = (timestamp as Timestamp).toDate();
-                          final expiryTime = messageTime.add(Duration(seconds: disappearAfter));
-                          if (DateTime.now().isAfter(expiryTime)) {
-                            // Delete expired message
-                            FirebaseFirestore.instance
-                                .collection('chats')
-                                .doc(doc.id)
-                                .delete();
-                            return false;
-                          }
-                        } catch (e) {
-                          debugPrint('Error processing message timestamp: $e');
-                          return false;
-                        }
-                      }
+                    final isSeen = doc['isSeen'] ?? false;
+                    if (isDisappearing && isSeen) {
+                      _startMessageTimer(doc);
                     }
                     
                     return (sender == widget.currentUser && receiver == widget.otherUser) ||
@@ -457,8 +470,20 @@ class _ChatPageState extends State<ChatPage> {
 
   // Update the message bubble style in the ListView.builder
   Widget _buildMessageBubble(BuildContext context, DocumentSnapshot msg, bool isMe) {
-    final isDisappearing = msg['isDisappearing'] ?? false;
+    final data = msg.data() as Map<String, dynamic>;
+    final isDisappearing = data['isDisappearing'] ?? false;
+    final isSeen = data['isSeen'] ?? false;
+    final seenAt = data['seenAt'] as Timestamp?;
+    final disappearAfter = data['disappearAfter'] as int?;
     
+    // Helper function to get status text
+    String getStatusText() {
+      if (!isDisappearing) return '';
+      if (!isSeen) return 'Waiting to be seen';
+      if (seenAt == null || disappearAfter == null) return 'Loading...';
+      return 'Disappearing in ${_getRemainingTime(seenAt, disappearAfter)}';
+    }
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -468,67 +493,83 @@ class _ChatPageState extends State<ChatPage> {
           left: isMe ? 64 : 8,
           right: isMe ? 8 : 64,
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 10,
-        ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: isDisappearing
-                ? [Colors.amber, Colors.orange.shade300]
-                : isMe
-                    ? [
-                        Theme.of(context).primaryColor,
-                        Theme.of(context).primaryColor.withOpacity(0.8),
-                      ]
-                    : [Colors.white, Colors.grey.shade50],
-          ),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 3,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Text(
-              EncryptionService.decryptMessage(msg['message'], _encryptionKey),
-              style: TextStyle(
-                color: isDisappearing
-                    ? Colors.black87
-                    : (isMe ? Colors.white : Colors.black87),
-                fontSize: 16,
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 10,
               ),
-            ),
-            if (isDisappearing)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(
-                      Icons.timer,
-                      size: 12,
-                      color: Colors.black54,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: isDisappearing
+                      ? [Colors.amber, Colors.orange.shade300]
+                      : isMe
+                          ? [
+                              Theme.of(context).primaryColor,
+                              Theme.of(context).primaryColor.withOpacity(0.8),
+                            ]
+                          : [Colors.white, Colors.grey.shade50],
+                ),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isMe ? 16 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 16),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 3,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    EncryptionService.decryptMessage(msg['message'], _encryptionKey),
+                    style: TextStyle(
+                      color: isDisappearing
+                          ? Colors.black87
+                          : (isMe ? Colors.white : Colors.black87),
+                      fontSize: 16,
                     ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Disappearing',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
+                  ),
+                  if (isDisappearing)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.timer,
+                            size: 12,
+                            color: Colors.black54,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            getStatusText(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
+                ],
+              ),
+            ),
+            if (isMe)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, right: 4),
+                child: Icon(
+                  isSeen ? Icons.done_all : Icons.done,
+                  size: 16,
+                  color: isSeen ? Colors.blue : Colors.grey,
                 ),
               ),
           ],
@@ -577,5 +618,15 @@ class _ChatPageState extends State<ChatPage> {
     _disappearingTimers.clear();
     _controller.dispose();
     super.dispose();
+  }
+
+  String _getRemainingTime(Timestamp seenAt, int disappearAfter) {
+    final expiryTime = seenAt.toDate().add(Duration(seconds: disappearAfter));
+    final remaining = expiryTime.difference(DateTime.now());
+    
+    if (remaining.isNegative) return 'Deleting...';
+    if (remaining.inHours > 0) return '${remaining.inHours}h ${remaining.inMinutes % 60}m';
+    if (remaining.inMinutes > 0) return '${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+    return '${remaining.inSeconds}s';
   }
 }
